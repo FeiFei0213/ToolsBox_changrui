@@ -224,6 +224,36 @@ class MyToolWidget(ToolBase):
 
 ---
 
+## 打包发布 EXE
+
+推送 Git tag 即可触发 GitHub Actions 自动打包，无需本地操作。
+
+### 触发方式
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+tag 格式须以 `v` 开头（如 `v1.0.0`、`v1.2.3`）。
+
+### 流程
+
+1. GitHub Actions 在 Windows 云端机器上自动执行
+2. 安装依赖 → PyInstaller 打包 → 生成单文件 `ToolsBox.exe`
+3. 自动创建 GitHub Release，exe 作为附件上传
+
+全程约 **3–5 分钟**，完成后在仓库 **Releases** 页面下载。
+
+### 费用
+
+| 仓库类型 | 费用 |
+|----------|------|
+| 公开仓库 | 完全免费 |
+| 私有仓库 | 每月 2000 分钟免费，Windows 按 2× 计约 1000 分钟；日常使用够用 |
+
+---
+
 ## 注意事项
 
 - **懒加载**：工具模块在点击卡片时才 import，缺少依赖只影响该工具，不影响主界面启动。

@@ -1,0 +1,45 @@
+name: Build & Release EXE
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Convert icon PNG to ICO
+        run: python -c "from PIL import Image; Image.open('icon/icon.png').save('icon.ico')"
+
+      - name: Build EXE
+        run: >
+          pyinstaller
+          --onefile
+          --windowed
+          --icon=icon.ico
+          --name=ToolsBox
+          --add-data "tools/pixel_starfire/config;tools/pixel_starfire/config"
+          main.py
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ToolsBox.exe
+          generate_release_notes: true
