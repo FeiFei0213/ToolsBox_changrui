@@ -1,0 +1,22 @@
+{
+  "polynomials": [
+    {
+      "name": "x_new",
+      "terms": [
+        {"coef": "a", "factors": [{"var": "x", "pow": 1}]},
+        {"coef": "b", "factors": [{"var": "y", "pow": 1}]},
+        {"coef": "f"}
+      ]
+    },
+    {
+      "name": "y_new",
+      "terms": [
+        {"coef": "g", "factors": [{"var": "x", "pow": 1}]},
+        {"coef": "h", "factors": [{"var": "y", "pow": 1}]},
+        {"coef": "i", "factors": [{"var": "y", "shift": 4096, "pow": 2}]},
+        {"coef": "j", "factors": [{"var": "y", "shift": 4096, "pow": 3}]},
+        {"coef": "p"}
+      ]
+    }
+  ]
+} 
