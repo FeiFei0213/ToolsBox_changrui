@@ -4,7 +4,6 @@ __pycache__/
 *.pyo
 .idea/
 .vscode/
-*.spec
 dist/
 build/
 
