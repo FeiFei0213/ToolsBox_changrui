@@ -23,17 +23,14 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller pillow
-
-      - name: Convert icon PNG to ICO
-        run: python -c "from PIL import Image; Image.open('icon/icon.png').save('icon.ico')"
+          pip install pyinstaller
 
       - name: Build EXE
         run: >
           pyinstaller
           --onefile
           --windowed
-          --icon=icon.ico
+          --icon=icon/icon.ico
           --name=ToolsBox
           --add-data "tools/pixel_starfire/config;tools/pixel_starfire/config"
           main.py
