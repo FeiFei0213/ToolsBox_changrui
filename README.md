@@ -1,4 +1,4 @@
-# VGS 工具箱
+# 工具箱
 
 集中管理常用小工具的独立启动器，基于 PySide6，点击卡片即可打开对应工具窗口。
 
@@ -8,22 +8,21 @@
 
 | 项目 | 版本 |
 |------|------|
-| Python | 3.11 |
+| Python | 3.11+ |
 | PySide6 | ≥ 6.0 |
 | opencv-python | 任意 |
 | numpy | 任意 |
+| pyyaml | 任意 |
+
+安装依赖：
+
+```bash
+pip install -r requirements.txt
+```
 
 ---
 
 ## 快速开始
-
-### 1. 激活环境
-
-```bash
-conda activate toolbox
-```
-
-### 2. 运行
 
 ```bash
 cd D:\project\code\toolbox
@@ -34,28 +33,28 @@ python main.py
 
 ## 当前工具
 
-### Mask 图像膨胀
+### 🔲 Mask 图像膨胀
 
-对灰度（黑白）图片执行形态学膨胀处理。
+对灰度图执行形态学膨胀，支持 ROI 区域指定。
 
 | 参数 | 说明 |
 |------|------|
 | 输入图片 | 灰度图，支持 PNG / JPG / BMP / TIFF，可拖拽 |
-| Kernel 大小 | 膨胀核的宽高（奇数），默认 3×3 |
-| 迭代次数 | 膨胀执行次数，数值越大效果越明显 |
-| 膨胀目标 | 膨胀白色区域 或 膨胀黑色区域 |
-| 翻转选项 | 膨胀前 / 膨胀后可各自独立翻转颜色 |
-| ROI 区域 | 限定膨胀范围，每行一个 `x1,y1,x2,y2`，留空表示整图 |
-| 排除区域 | 指定不膨胀的区域，格式同上 |
-| 输出路径 | 留空不保存，填写路径则保存结果图 |
+| Kernel 大小 | 膨胀核宽高（奇数），默认 3×3 |
+| 迭代次数 | 膨胀执行次数 |
+| 膨胀目标 | 白色区域 / 黑色区域 |
+| 翻转选项 | 膨胀前 / 后独立翻转颜色 |
+| ROI 区域 | 每行一个 `x1,y1,x2,y2`，留空表示整图 |
+| 排除区域 | 不膨胀的区域，格式同上 |
+| 输出路径 | 留空不保存 |
 
-执行后左右对比预览原图与结果图。
+执行后左右对比预览原图与结果。
 
 ---
 
-### TXT → YAML 转换
+### 📄 TXT → YAML 转换
 
-将安全区域坐标的 TXT 文件批量转换为 YAML 格式。
+将安全区域坐标 TXT 文件批量转换为 YAML 格式。
 
 **输入格式（TXT）**
 
@@ -64,7 +63,6 @@ x1,y1
 x2,y2
 ---
 x3,y3
-x4,y4
 ```
 
 `---` 分隔多个轮廓。
@@ -77,24 +75,22 @@ contour1:
   - [x2, y2]
 contour2:
   - [x3, y3]
-  - [x4, y4]
 ```
 
-支持：打开文件、粘贴文本、拖拽 TXT 文件、批量转换、复制结果、另存 YAML。
+支持打开文件、粘贴文本、拖拽、批量转换、复制结果、另存 YAML。
 
 ---
 
-### 像素坐标转换
+### ✨ 像素坐标转换（Pixel Starfire）
 
 在图片上点击拾取像素坐标，转换为星火坐标系，记录到表格并支持导出 CSV。
 
 **使用步骤**
 
 1. 选择设备（M7 / M23 / M24 / M25 / M26）和位置（0 / 1）
-2. 点击"打开图片"加载图片
-3. 点击"点击拾取坐标（P）"进入拾取模式
-4. 在图片上点击，坐标自动转换并记录到下方表格
-5. 可"导出 CSV"保存所有记录点
+2. 打开图片
+3. 进入拾取模式，点击图片记录坐标
+4. 导出 CSV
 
 **快捷键**
 
@@ -106,39 +102,102 @@ contour2:
 
 ---
 
+### 📍 JSON 点坐标提取
+
+从 X-anylabeling 标注 JSON 文件提取所有 shapes 中的点坐标，输出 `[x, y],` 格式，一键复制。
+
+支持拖拽 JSON 文件到窗口。
+
+---
+
+### 📐 PLT 轮廓查看器
+
+查看 `contour.plt` 文件的轮廓和点，可叠加背景图对比。
+
+- 支持加载背景图片（PNG / JPG / TIFF）
+- 可调整点大小、线宽、背景透明度
+- 支持加载 `mapping_params_file`（fit_params.json）和 `mapping_poly_file`，实时编辑参数并重绘逆变换结果
+- 默认自动加载 `config/device/M7/0/` 下的配置文件
+
+---
+
+### 🎯 标定点编辑
+
+在图片上编辑 YAML 格式的标定点坐标。
+
+- 自动识别 YAML 中的单个坐标和坐标数组（多边形）
+- 拖拽移动点，方向键微调（可配置步长）
+- 图层面板控制各组点的显示/隐藏
+- 框选多点批量移动
+- 保存时自动格式化输出 YAML
+
+---
+
+### 🔭 标定分析（Board Calibration）
+
+线扫相机椭圆轴比检测与标定点标记工具。
+
+**椭圆检测模式**
+
+1. 打开图片（路径须为纯英文）
+2. 在图片上拖拽选定 ROI（支持旋转）
+3. 点击"检测椭圆"，自动计算各椭圆 Y/X 轴比
+4. 输出平均比值、乘法器、后分配器建议值
+5. 填写圆直径（mm）可进一步计算像素比例尺（mm/px）
+
+**线扫标定模式**
+
+1. 在图片上左键单击标记像素点（自动编号），右键删除
+2. 导入真实坐标文件（`xst_start` / `xst_end` 格式）
+3. 像素坐标与真实坐标自动对应展示
+
+---
+
 ## 目录结构
 
 ```
 toolbox/
-├── main.py                 # 入口：启动 QApplication
-├── launcher.py             # 主启动器窗口（卡片网格）
-├── tool_base.py            # ToolBase 抽象基类
-├── registry.py             # 工具注册表 ← 添加新工具改这里
+├── main.py                      # 入口
+├── launcher.py                  # 卡片网格启动器
+├── tool_base.py                 # ToolBase 抽象基类
+├── registry.py                  # 工具注册表 ← 添加新工具改这里
 ├── requirements.txt
+├── icon/
+│   └── icon.png                 # 应用图标（打包时使用）
 └── tools/
+    ├── common_ui.py             # 共享 UI 组件（可折叠 Dock 标题栏等）
+    ├── yaml_formatter.py        # YAML 格式化工具
     ├── mask_dilate/
-    │   ├── core.py         # 膨胀核心逻辑（纯函数）
-    │   └── widget.py       # MaskDilateWidget（GUI）
+    │   ├── core.py
+    │   └── widget.py
     ├── txt_yaml/
-    │   └── widget.py       # TxtYamlWidget（GUI + 转换逻辑）
-    └── pixel_starfire/
-        ├── pixel_to_starfire.py  # 坐标转换核心函数
-        ├── widget.py             # PixelStarfireWidget（GUI）
-        └── config/device/        # 各设备标定参数 JSON
-            ├── M7/{0,1}/
-            ├── M23/{0,1}/
-            ├── M24/{0,1}/
-            ├── M25/{0,1}/
-            └── M26/{0,1}/
+    │   └── widget.py
+    ├── pixel_starfire/
+    │   ├── pixel_to_starfire.py
+    │   ├── widget.py
+    │   └── config/device/{M7,M23,M24,M25,M26}/{0,1}/
+    ├── extra_json/
+    │   ├── core.py
+    │   └── widget.py
+    ├── plt_viewer/
+    │   ├── inverse_transform.py # 多项式逆变换算法（脱离 vgs 独立运行）
+    │   └── widget.py
+    ├── calibration_point_editor/
+    │   └── widget.py
+    ├── point_annotator/
+    │   └── widget.py
+    └── board_calibration/       # 来自 github.com/pipihuang2/board_calibration
+        ├── ellipse_detector.py
+        ├── image_view.py
+        ├── point_picker_view.py
+        └── widget.py
 ```
 
 ---
 
 ## 添加新工具
 
-### 第一步：新建工具文件
-
-在 `tools/` 下创建一个新目录（或直接新建 `.py` 文件），编写继承 `ToolBase` 的 widget 类：
+**第一步**：在 `tools/` 下新建目录，编写继承 `ToolBase` 的 widget 类：
 
 ```python
 # tools/my_tool/widget.py
@@ -150,35 +209,23 @@ class MyToolWidget(ToolBase):
     tool_icon = "🛠"
 
     def init_ui(self):
-        # 在这里构建 UI，self 即是 QWidget
-        ...
+        ...  # 构建 UI，self 即是 QWidget
 ```
 
-**`ToolBase` 规范**
+> 若工具需要 `QMainWindow`（带 Dock / Toolbar），直接继承 `QMainWindow` 并声明三个类属性即可，无需继承 `ToolBase`。
 
-| 属性 / 方法 | 类型 | 说明 |
-|------------|------|------|
-| `tool_name` | `str` | 显示在卡片标题 |
-| `tool_description` | `str` | 显示在卡片副标题 |
-| `tool_icon` | `str` | 卡片图标（emoji 或留空） |
-| `init_ui(self)` | 抽象方法 | 必须实现，构建 UI 布局 |
-
-### 第二步：注册到 registry.py
+**第二步**：在 `registry.py` 追加一行：
 
 ```python
-# registry.py
-TOOLS = [
-    ...
-    {"module": "tools.my_tool.widget", "class": "MyToolWidget"},  # 加这一行
-]
+{"module": "tools.my_tool.widget", "class": "MyToolWidget"},
 ```
 
-重启程序，新工具卡片自动出现。
+重启程序，卡片自动出现。
 
 ---
 
 ## 注意事项
 
 - **懒加载**：工具模块在点击卡片时才 import，缺少依赖只影响该工具，不影响主界面启动。
-- **像素坐标转换的配置文件**：标定参数存储在 `tools/pixel_starfire/config/device/`，如需增加设备，按相同目录结构放入 `fit_params.json` 和 `polynomials_fit.json` 即可，无需修改代码。
-- **conda 环境**：使用 `toolbox` 环境，解释器路径 `D:\project\miniconda3\envs\toolbox\python.exe`。
+- **图标**：打包时使用 `icon/icon.png`。
+- **board_calibration**：图片路径须为纯英文，不支持中文路径。
