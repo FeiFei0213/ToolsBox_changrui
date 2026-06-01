@@ -15,6 +15,7 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -45,7 +46,31 @@ from tool_base import ToolBase
 # ─────────────────────────────────────────────────────────────────
 
 _SETTINGS_FILE = Path(__file__).parent / "settings.json"
-_DEFAULT_VGS_ROOT = r"D:\project\code\vgs"
+_LOG_FILE       = Path(__file__).parent / "replacement_log.json"
+
+# 自动扫描时在各盘符下尝试的相对路径（从最可能到最不可能）
+_SCAN_SUBPATHS = [
+    "project/code/vgs",
+    "projects/code/vgs",
+    "code/vgs",
+    "dev/vgs",
+    "vgs",
+    "work/vgs",
+    "workspace/vgs",
+]
+
+
+def _auto_detect_vgs_root() -> str | None:
+    """扫描各盘符的常见路径，找到含 config/device 目录的 VGS 根目录。"""
+    import string
+    drives = [f"{d}:" for d in string.ascii_uppercase
+              if Path(f"{d}:\\").exists()]
+    for drive in drives:
+        for sub in _SCAN_SUBPATHS:
+            candidate = Path(drive) / sub
+            if (candidate / "config" / "device").is_dir():
+                return str(candidate)
+    return None
 
 
 def _load_settings() -> dict:
@@ -64,15 +89,31 @@ def _save_settings(data: dict) -> None:
         logger.warning(f"save settings: {e}")
 
 
+def _append_replacement_log(record: dict) -> None:
+    try:
+        records = json.loads(_LOG_FILE.read_text(encoding="utf-8")) if _LOG_FILE.exists() else []
+        records.append(record)
+        _LOG_FILE.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"write replacement log: {e}")
+
+
+def _read_replacement_log() -> list:
+    try:
+        return json.loads(_LOG_FILE.read_text(encoding="utf-8")) if _LOG_FILE.exists() else []
+    except Exception:
+        return []
+
+
 # ─────────────────────────────────────────────────────────────────
 # Collision file scanner
 # ─────────────────────────────────────────────────────────────────
 
-def scan_collision_targets(vgs_root: str) -> dict:
+def scan_all_molds(vgs_root: str) -> dict:
     """
-    扫描 VGS 配置目录，返回嵌套字典：
-      { device: { mold_type: { mold_name: Path(collision_yaml) } } }
-    只包含实际存在 collision yaml 的条目。
+    扫描所有设备/模具目录，返回：
+      { device: { mold_type: { mold_name: Path|None } } }
+    Path = collision yaml 路径（文件存在），None = 尚无碰撞文件
     """
     result: dict = {}
     device_root = Path(vgs_root) / "config" / "device"
@@ -94,11 +135,10 @@ def scan_collision_targets(vgs_root: str) -> dict:
                     mold_name_dir
                     / f"{mold_type_dir.name}_collision_{mold_name_dir.name}.yaml"
                 )
-                if target.exists():
-                    d = device_dir.name
-                    mt = mold_type_dir.name
-                    mn = mold_name_dir.name
-                    result.setdefault(d, {}).setdefault(mt, {})[mn] = target
+                d, mt, mn = device_dir.name, mold_type_dir.name, mold_name_dir.name
+                result.setdefault(d, {}).setdefault(mt, {})[mn] = (
+                    target if target.exists() else None
+                )
     return result
 
 ENCODINGS = ("utf-8-sig", "utf-8", "gb18030", "utf-16")
@@ -212,12 +252,17 @@ class CollisionDeployPanel(QWidget):
         path_row = QHBoxLayout()
         path_row.addWidget(QLabel("VGS 路径:"))
         self._path_edit = QLineEdit()
-        self._path_edit.setPlaceholderText(_DEFAULT_VGS_ROOT)
+        self._path_edit.setPlaceholderText("VGS 根目录（含 config/device 的上级目录）")
         path_row.addWidget(self._path_edit, 1)
         browse_btn = QPushButton("浏览")
         browse_btn.setFixedWidth(52)
         browse_btn.clicked.connect(self._browse_vgs_root)
         path_row.addWidget(browse_btn)
+        auto_btn = QPushButton("自动查找")
+        auto_btn.setFixedWidth(72)
+        auto_btn.setToolTip("自动扫描各盘符的常见路径")
+        auto_btn.clicked.connect(self._auto_find)
+        path_row.addWidget(auto_btn)
         rescan_btn = QPushButton("重新扫描")
         rescan_btn.clicked.connect(self._load_and_scan)
         path_row.addWidget(rescan_btn)
@@ -265,14 +310,20 @@ class CollisionDeployPanel(QWidget):
         self._deploy_one_btn.clicked.connect(self._deploy_one)
         btn_row.addWidget(self._deploy_one_btn)
 
-        self._deploy_all_btn = QPushButton("替换所有设备（同款同模具）")
-        self._deploy_all_btn.setStyleSheet(
-            "QPushButton { background:#388E3C; color:white; padding:5px 16px;"
+        self._create_btn = QPushButton("新增碰撞区域文件")
+        self._create_btn.setStyleSheet(
+            "QPushButton { background:#E65100; color:white; padding:5px 16px;"
             " border-radius:4px; } QPushButton:disabled { background:#aaa; }"
         )
-        self._deploy_all_btn.setEnabled(False)
-        self._deploy_all_btn.clicked.connect(self._deploy_all)
-        btn_row.addWidget(self._deploy_all_btn)
+        self._create_btn.setEnabled(False)
+        self._create_btn.setToolTip("为当前选中的模具新建 collision yaml 文件")
+        self._create_btn.clicked.connect(self._create_new_collision)
+        btn_row.addWidget(self._create_btn)
+
+        log_btn = QPushButton("查看替换记录")
+        log_btn.clicked.connect(self._show_log)
+        btn_row.addWidget(log_btn)
+
         btn_row.addStretch()
         gl.addLayout(btn_row)
 
@@ -292,28 +343,53 @@ class CollisionDeployPanel(QWidget):
 
     def _load_and_scan(self):
         settings = _load_settings()
-        vgs_root = settings.get("vgs_root", _DEFAULT_VGS_ROOT)
+        vgs_root = settings.get("vgs_root", "")
+
+        # 已保存的路径不再存在时清空，重新自动检测
+        if vgs_root and not Path(vgs_root).is_dir():
+            vgs_root = ""
+
+        if not vgs_root:
+            detected = _auto_detect_vgs_root()
+            if detected:
+                vgs_root = detected
+                settings["vgs_root"] = vgs_root
+                _save_settings(settings)
+
         self._path_edit.setText(vgs_root)
 
-        self._targets = scan_collision_targets(vgs_root)
+        self._targets = scan_all_molds(vgs_root)
+
+        total = sum(
+            1 for d in self._targets.values()
+            for mt in d.values()
+            for p in mt.values() if p is not None
+        )
+        missing = sum(
+            1 for d in self._targets.values()
+            for mt in d.values()
+            for p in mt.values() if p is None
+        )
 
         self._device_combo.blockSignals(True)
         self._device_combo.clear()
         if self._targets:
             for dev in self._targets:
                 self._device_combo.addItem(dev, dev)
-            self._status_label.setText(
-                f"已扫描到 {sum(len(mt) for d in self._targets.values() for mt in d.values())} 个碰撞文件"
-            )
+            tip = f"已扫描 {total} 个碰撞文件"
+            if missing:
+                tip += f"，{missing} 个模具尚无碰撞文件"
+            self._status_label.setText(tip)
         else:
-            self._status_label.setText("未找到碰撞文件，请确认 VGS 路径是否正确")
+            self._status_label.setText("未找到任何模具目录，请确认 VGS 路径是否正确")
         self._device_combo.blockSignals(False)
 
         self._on_device_changed()
 
     def _browse_vgs_root(self):
+        start = self._path_edit.text().strip() or str(Path.home())
         path = QFileDialog.getExistingDirectory(
-            self, "选择 VGS 项目根目录", self._path_edit.text() or _DEFAULT_VGS_ROOT
+            self, "选择 VGS 项目根目录", start
         )
         if not path:
             return
@@ -322,6 +398,23 @@ class CollisionDeployPanel(QWidget):
         settings["vgs_root"] = path
         _save_settings(settings)
         self._load_and_scan()
+
+    def _auto_find(self):
+        self._status_label.setText("正在扫描，请稍候…")
+        self.repaint()
+        found = _auto_detect_vgs_root()
+        if found:
+            self._path_edit.setText(found)
+            settings = _load_settings()
+            settings["vgs_root"] = found
+            _save_settings(settings)
+            self._load_and_scan()
+        else:
+            self._status_label.setText("未自动找到 VGS 目录，请点击浏览手动选择")
+            QMessageBox.information(
+                self, "未找到",
+                "自动扫描未找到 VGS 根目录。\n请点击「浏览」手动选择包含 config/device 的项目目录。"
+            )
 
     # ── 级联更新 ──────────────────────────────────────────────────
 
@@ -342,14 +435,30 @@ class CollisionDeployPanel(QWidget):
         self._mold_name_combo.clear()
         if device and mold_type and device in self._targets:
             molds = self._targets[device].get(mold_type, {})
-            for mn in molds:
-                self._mold_name_combo.addItem(mn, mn)
+            for mn, path in molds.items():
+                label = mn if path else f"{mn}  （无碰撞文件）"
+                self._mold_name_combo.addItem(label, mn)
         self._mold_name_combo.blockSignals(False)
         self._on_mold_name_changed()
 
     def _on_mold_name_changed(self):
         path = self._current_target_path()
-        self._target_label.setText(str(path) if path else "—")
+        if path is not None:
+            self._target_label.setText(str(path))
+        else:
+            device    = self._device_combo.currentData()
+            mold_type = self._mold_type_combo.currentData()
+            mold_name = self._mold_name_combo.currentData()
+            if device and mold_type and mold_name:
+                vgs_root = self._path_edit.text().strip() or _DEFAULT_VGS_ROOT
+                suggested = (
+                    Path(vgs_root) / "config" / "device" / device
+                    / "mold" / mold_type / mold_name
+                    / f"{mold_type}_collision_{mold_name}.yaml"
+                )
+                self._target_label.setText(f"（待创建）{suggested}")
+            else:
+                self._target_label.setText("—")
         self.refresh_buttons()
 
     def _current_target_path(self) -> Path | None:
@@ -363,9 +472,23 @@ class CollisionDeployPanel(QWidget):
     # ── 按钮激活 ──────────────────────────────────────────────────
 
     def refresh_buttons(self):
-        ok = bool(self._current_target_path() and self._get_yaml_text())
-        self._deploy_one_btn.setEnabled(ok)
-        self._deploy_all_btn.setEnabled(ok)
+        has_yaml = bool(self._get_yaml_text())
+        has_file = self._current_target_path() is not None
+        no_file  = self._current_mold_dir_path() is not None and not has_file
+        self._deploy_one_btn.setEnabled(has_yaml and has_file)
+        self._create_btn.setEnabled(has_yaml and no_file)
+
+    def _current_mold_dir_path(self) -> "Path | None":
+        device    = self._device_combo.currentData()
+        mold_type = self._mold_type_combo.currentData()
+        mold_name = self._mold_name_combo.currentData()
+        if not (device and mold_type and mold_name):
+            return None
+        vgs_root = self._path_edit.text().strip() or _DEFAULT_VGS_ROOT
+        return (
+            Path(vgs_root) / "config" / "device"
+            / device / "mold" / mold_type / mold_name
+        )
 
     # ── 部署 ──────────────────────────────────────────────────────
 
@@ -375,26 +498,37 @@ class CollisionDeployPanel(QWidget):
             QMessageBox.warning(self, "无内容", "请先转换 TXT 内容再部署。")
             return
 
-        # 二次确认
         files_text = "\n".join(f"  {p}" for p in paths)
         reply = QMessageBox.question(
             self, "确认替换",
-            f"即将替换以下 {len(paths)} 个文件（原文件自动备份为 .bak）：\n\n{files_text}\n\n确认继续？",
+            f"即将替换以下 {len(paths)} 个文件（原文件自动备份，带时间戳）：\n\n{files_text}\n\n确认继续？",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        device    = self._device_combo.currentData()
+        mold_type = self._mold_type_combo.currentData()
+        mold_name = self._mold_name_combo.currentData()
+
         success, failed = [], []
         for p in paths:
-            bak = p.with_suffix(".yaml.bak")
+            bak = p.with_name(f"{p.stem}_{ts}.yaml.bak")
             try:
                 if p.exists():
                     shutil.copy2(p, bak)
                 p.write_text(yaml_text, encoding="utf-8")
                 success.append(p)
+                _append_replacement_log({
+                    "time":      datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "device":    device or "",
+                    "mold_type": mold_type or "",
+                    "mold_name": mold_name or "",
+                    "file":      str(p),
+                    "backup":    str(bak),
+                })
             except Exception as exc:
-                # 还原备份
                 if bak.exists():
                     try:
                         shutil.copy2(bak, p)
@@ -408,7 +542,7 @@ class CollisionDeployPanel(QWidget):
             QMessageBox.critical(self, "部分失败", f"以下文件替换失败：\n{msg}")
         if success:
             self._status_label.setText(
-                f"已替换 {len(success)} 个文件（原文件已备份为 .bak）"
+                f"已替换 {len(success)} 个文件（备份: {ts}）"
             )
 
     def _deploy_one(self):
@@ -416,18 +550,80 @@ class CollisionDeployPanel(QWidget):
         if path:
             self._deploy([path])
 
-    def _deploy_all(self):
+    def _create_new_collision(self):
+        from PySide6.QtWidgets import QInputDialog
+        device    = self._device_combo.currentData()
         mold_type = self._mold_type_combo.currentData()
         mold_name = self._mold_name_combo.currentData()
-        if not (mold_type and mold_name):
+        yaml_text = self._get_yaml_text()
+        if not (device and mold_type and mold_name and yaml_text):
             return
-        paths = [
-            self._targets[dev][mold_type][mold_name]
-            for dev in self._targets
-            if mold_type in self._targets[dev]
-            and mold_name in self._targets[dev][mold_type]
-        ]
-        self._deploy(paths)
+
+        dir_path       = self._current_mold_dir_path()
+        suggested_name = f"{mold_type}_collision_{mold_name}.yaml"
+
+        # 警告
+        msg = (
+            "⚠  新增碰撞区域文件请联系视觉工作人员！\n\n"
+            "确认已获得视觉工作人员授权后，点击 OK 继续。\n\n"
+            f"建议文件名：{suggested_name}\n"
+            f"保存目录：{dir_path}"
+        )
+        reply = QMessageBox.warning(
+            self, "新增碰撞区域文件", msg,
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Ok:
+            return
+
+        filename, ok = QInputDialog.getText(
+            self, "确认文件名", "文件名（可修改）：", text=suggested_name
+        )
+        if not ok or not filename.strip():
+            return
+        filename = filename.strip()
+        if not filename.endswith(".yaml"):
+            filename += ".yaml"
+
+        save_path = dir_path / filename
+        try:
+            dir_path.mkdir(parents=True, exist_ok=True)
+            save_path.write_text(yaml_text, encoding="utf-8")
+        except Exception as exc:
+            QMessageBox.critical(self, "创建失败", str(exc))
+            return
+
+        self._status_label.setText(f"已创建: {save_path}")
+        QMessageBox.information(self, "创建成功", f"碰撞区域文件已创建:\n{save_path}")
+        self._load_and_scan()
+
+    def _show_log(self):
+        from PySide6.QtWidgets import QDialog, QTextEdit, QDialogButtonBox
+        records = _read_replacement_log()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("替换记录")
+        dlg.resize(860, 480)
+        lay = QVBoxLayout(dlg)
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setFontFamily("Consolas")
+        if not records:
+            txt.setPlainText("暂无替换记录。")
+        else:
+            lines = []
+            for r in reversed(records):  # 最新的在最上面
+                lines.append(
+                    f"[{r.get('time','')}]  "
+                    f"{r.get('device','')} / {r.get('mold_type','')} / {r.get('mold_name','')}\n"
+                    f"  文件: {r.get('file','')}\n"
+                    f"  备份: {r.get('backup','')}\n"
+                )
+            txt.setPlainText("\n".join(lines))
+        lay.addWidget(txt, 1)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        btns.rejected.connect(dlg.reject)
+        lay.addWidget(btns)
+        dlg.exec()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -462,8 +658,8 @@ class DropTextEdit(QPlainTextEdit):
 
 
 class TxtYamlWidget(ToolBase):
-    tool_name = "TXT → YAML 转换"
-    tool_description = "将安全区域坐标 TXT 文件批量转换为 YAML 格式"
+    tool_name = "替换碰撞区域文件（txt转yaml）"
+    tool_description = "将安全区域坐标 TXT 转为 YAML，并部署/新增到 VGS 碰撞配置"
     tool_icon = "📄"
 
     def init_ui(self):

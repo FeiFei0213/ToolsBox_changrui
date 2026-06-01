@@ -6,7 +6,7 @@ widget.py — 标注点工具
 - 拖动单点 / 框选多点后整体拖动
 - 右键重命名 / 删除，Delete 键删除选中
 - Ctrl+Z / Ctrl+Y 撤销 / 重做
-- 自动保存到同目录 {图片名}.annot.json，下次打开同一图片自动加载
+- 自动保存到同目录 {图片名}.json，下次打开同一图片自动加载
 - 导出 JSON / CSV，复制坐标到剪贴板
 """
 import json
@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsItem, QGraphicsPixmapItem,
     QLabel, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QFileDialog, QMessageBox, QInputDialog, QMenu, QAbstractItemView,
-    QGroupBox, QFrame, QApplication,
+    QGroupBox, QFrame, QApplication, QPlainTextEdit,
 )
 
 from tool_base import ToolBase
@@ -394,9 +394,10 @@ class AnnotationViewer(QGraphicsView):
 class PointListPanel(QWidget):
     """侧边栏：点列表（实时同步）+ 导出操作。"""
 
-    selected_indices_changed = Signal(set)    # 用户在表格中选了哪些行
-    offset_requested         = Signal(float, float)  # (dx, dy)
-    select_all_requested     = Signal()
+    selected_indices_changed  = Signal(set)         # 用户在表格中选了哪些行
+    offset_requested          = Signal(float, float) # (dx, dy)
+    select_all_requested      = Signal()
+    save_extra_json_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -508,6 +509,29 @@ class PointListPanel(QWidget):
             lambda: self.offset_requested.emit(self.step_spin.value(), 0))
         self.select_all_btn.clicked.connect(self.select_all_requested)
 
+        # ── Extra JSON 提取 ───────────────────────────────────────
+        extra_group = QGroupBox("Extra JSON 坐标")
+        eg = QVBoxLayout(extra_group)
+        eg.setSpacing(4)
+
+        self.extra_json_edit = QPlainTextEdit()
+        self.extra_json_edit.setReadOnly(True)
+        self.extra_json_edit.setPlaceholderText("[x,y],\n格式输出…")
+        self.extra_json_edit.setMaximumHeight(110)
+        eg.addWidget(self.extra_json_edit)
+
+        extra_btn_row = QHBoxLayout()
+        self.extra_copy_btn = QPushButton("复制")
+        self.extra_save_btn = QPushButton("保存")
+        extra_btn_row.addWidget(self.extra_copy_btn)
+        extra_btn_row.addWidget(self.extra_save_btn)
+        eg.addLayout(extra_btn_row)
+
+        layout.addWidget(extra_group)
+
+        self.extra_copy_btn.clicked.connect(self._copy_extra_json)
+        self.extra_save_btn.clicked.connect(self.save_extra_json_requested)
+
     # ── 刷新 ──────────────────────────────────────────────────────
 
     def refresh(self, points: list[AnnotationPoint]):
@@ -551,6 +575,18 @@ class PointListPanel(QWidget):
             return
         self.selected_indices_changed.emit(self._selected_indices())
 
+    def refresh_extra_json(self, points: list):
+        lines = [
+            f"[{p.pos().x():.2f},{p.pos().y():.2f}],"
+            for p in sorted(points, key=lambda p: p.index)
+        ]
+        self.extra_json_edit.setPlainText("\n".join(lines))
+
+    def _copy_extra_json(self):
+        text = self.extra_json_edit.toPlainText()
+        if text:
+            QApplication.clipboard().setText(text)
+
 
 # ─────────────────────────────────────────────────────────────────
 # PointAnnotatorWidget
@@ -575,10 +611,10 @@ class PointAnnotatorWidget(ToolBase):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_toolbar())
-
         self._scene  = AnnotationScene()
         self._viewer = AnnotationViewer(self._scene)
+
+        root.addWidget(self._build_toolbar())
         self._panel  = PointListPanel()
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -624,6 +660,7 @@ class PointAnnotatorWidget(ToolBase):
         self._panel.selected_indices_changed.connect(self._on_table_selection_changed)
         self._panel.offset_requested.connect(self._scene.offset_selected)
         self._panel.select_all_requested.connect(self._select_all)
+        self._panel.save_extra_json_requested.connect(self._save_extra_json)
 
         # ── 快捷键 ────────────────────────────────────────────────
         QShortcut(QKeySequence.StandardKey.Undo,      self, self._scene.undo)
@@ -684,6 +721,13 @@ class PointAnnotatorWidget(ToolBase):
         fit_btn = QPushButton("适应窗口")
         fit_btn.clicked.connect(self._fit_view)
         layout.addWidget(fit_btn)
+
+        layout.addWidget(self._vline())
+
+        import_pts_btn = QPushButton("导入点")
+        import_pts_btn.setToolTip("从 JSON 文件读取点坐标，替换当前画布上的标注点")
+        import_pts_btn.clicked.connect(self._import_points_from_file)
+        layout.addWidget(import_pts_btn)
 
         layout.addStretch()
 
@@ -757,7 +801,7 @@ class PointAnnotatorWidget(ToolBase):
     # ── 自动保存 ──────────────────────────────────────────────────
 
     def _annot_path(self) -> Path | None:
-        return Path(self._image_path).with_suffix(".annot.json") if self._image_path else None
+        return Path(self._image_path).with_suffix(".json") if self._image_path else None
 
     def _auto_save(self):
         path = self._annot_path()
@@ -778,6 +822,7 @@ class PointAnnotatorWidget(ToolBase):
     def _on_points_changed(self):
         pts = self._scene.annotation_points()
         self._panel.refresh(pts)
+        self._panel.refresh_extra_json(pts)
         sel_idx = {p.index for p in self._scene.selectedItems()
                    if isinstance(p, AnnotationPoint)}
         self._panel.sync_selection(sel_idx)
@@ -849,6 +894,56 @@ class PointAnnotatorWidget(ToolBase):
         lines = [f"{p.label}\t{p.pos().x():.0f}\t{p.pos().y():.0f}" for p in pts]
         QApplication.clipboard().setText("\n".join(lines))
         self._set_status(f"已复制 {len(pts)} 个点的坐标到剪贴板")
+
+    def _import_points_from_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "选择标注文件", "", "JSON 文件 (*.json)"
+        )
+        if not path:
+            return
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            pts = data.get("points", [])
+            if not pts:
+                QMessageBox.information(self, "提示", "文件中没有找到点数据")
+                return
+        except Exception as e:
+            QMessageBox.critical(self, "读取失败", str(e))
+            return
+
+        if self._scene.annotation_points():
+            reply = QMessageBox.question(
+                self, "替换确认",
+                f"当前画布已有 {len(self._scene.annotation_points())} 个点，\n"
+                f"是否替换为文件中的 {len(pts)} 个点？\n\n"
+                "（Yes=替换  No=追加）",
+                QMessageBox.StandardButton.Yes |
+                QMessageBox.StandardButton.No  |
+                QMessageBox.StandardButton.Cancel,
+            )
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            if reply == QMessageBox.StandardButton.Yes:
+                self._scene._push_undo()
+                for pt in self._scene.annotation_points():
+                    self._scene.removeItem(pt)
+        self._scene.load_points(pts)
+        self._set_status(f"已导入 {len(pts)} 个点（来自 {Path(path).name}）")
+
+    def _save_extra_json(self):
+        text = self._panel.extra_json_edit.toPlainText()
+        if not text:
+            QMessageBox.information(self, "提示", "没有坐标数据")
+            return
+        default = (str(Path(self._image_path).with_suffix(".coords.txt"))
+                   if self._image_path else "coords.txt")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "保存坐标文本", default, "文本文件 (*.txt);;所有文件 (*)"
+        )
+        if not path:
+            return
+        Path(path).write_text(text, encoding="utf-8")
+        self._set_status(f"Extra JSON 坐标已保存到: {Path(path).name}")
 
     def _set_status(self, text: str):
         self._status.setText(text)

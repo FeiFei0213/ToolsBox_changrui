@@ -52,9 +52,9 @@ python main.py
 
 ---
 
-### 📄 TXT → YAML 转换
+### 📄 替换碰撞区域文件（txt转yaml）
 
-将安全区域坐标 TXT 文件批量转换为 YAML 格式。
+将安全区域坐标 TXT 文件转换为 YAML 格式，并部署或新增到 VGS 碰撞配置目录。
 
 **输入格式（TXT）**
 
@@ -99,6 +99,33 @@ contour2:
 | Ctrl+O | 打开图片 |
 | P | 切换拾取模式 |
 | Ctrl+Z | 撤销最后一点 |
+
+---
+
+### 📌 标注点工具
+
+在图片上点击标注坐标点，支持拖动、撤销/重做、自动保存复用。
+
+**功能**
+
+- 点击空白处添加标注点（自动编号）
+- 拖动单点 / 框选多点后整体拖动
+- 右键重命名 / 删除，Delete 键删除选中点
+- 自动保存到同目录 `{图片名}.json`，下次打开同一图片自动还原
+- 侧边栏实时列表，支持偏移选中点（方向键 + 自定义步长）
+- 导出 JSON / CSV
+- **Extra JSON 坐标**：自动将当前所有标注点格式化为 `[x,y],` 文本，可一键复制或另存为 TXT
+
+**快捷键**
+
+| 键 | 功能 |
+|----|------|
+| Ctrl+O | 打开图片 |
+| Tab | 切换标注 / 选择模式 |
+| Ctrl+Z | 撤销 |
+| Ctrl+Y | 重做 |
+| Ctrl+A | 全选所有点 |
+| Delete | 删除选中点 |
 
 ---
 
@@ -153,6 +180,31 @@ contour2:
 
 ---
 
+### 📋 日志查看器
+
+查看 `D:\project\code\vgs\logs` 下的 VGS 运行日志，解决 UI 关闭后日志消失的问题。
+
+**功能**
+
+- 左侧文件列表，按修改时间倒序排列，当前日志置顶
+- 后台线程解析，不阻塞 UI；默认隐藏 DEBUG（应对 81MB 大文件）
+- 支持 DEBUG / INFO / WARNING / ERROR 四级独立过滤
+- 实时关键词搜索（匹配消息内容 + 模块名）
+- 行颜色按级别区分：WARNING 橙色、ERROR 红色
+- 底部详情面板，点击任意行显示时间/级别/模块/来源/线程/完整消息
+- **自动刷新**（仅当前日志）：每 3 秒检查新增内容，追加显示不全量重载
+- 勾选 DEBUG 且文件 >5MB 时，只读末尾 20MB 控制内存
+
+**快捷键**
+
+| 键 | 功能 |
+|----|------|
+| Ctrl+R | 重新加载当前文件 |
+| Ctrl+F | 聚焦关键词输入框 |
+| Ctrl+E | 切换"仅看错误"模式（只显示 WARNING/ERROR） |
+
+---
+
 ## 目录结构
 
 ```
@@ -185,6 +237,8 @@ toolbox/
     ├── calibration_point_editor/
     │   └── widget.py
     ├── point_annotator/
+    │   └── widget.py
+    ├── log_viewer/
     │   └── widget.py
     └── board_calibration/       # 来自 github.com/pipihuang2/board_calibration
         ├── ellipse_detector.py

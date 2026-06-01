@@ -12,6 +12,7 @@ TOOLS = [
     {"module": "tools.calibration_point_editor.widget",      "class": "CalibrationPointEditorWindow"},
     {"module": "tools.point_annotator.widget",               "class": "PointAnnotatorWidget"},
     {"module": "tools.board_calibration.widget",             "class": "BoardCalibrationWindow"},
+    {"module": "tools.log_viewer.widget",                    "class": "LogViewerWidget"},
 ]
 
 

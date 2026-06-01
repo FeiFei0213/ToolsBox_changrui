@@ -7,3 +7,9 @@ __pycache__/
 *.spec
 dist/
 build/
+
+# 本机配置和本地数据，不入仓库
+tools/txt_yaml/settings.json
+tools/txt_yaml/replacement_log.json
+*.yaml.bak
+*.json.bak
