@@ -28,6 +28,8 @@ jobs:
 
       - name: Smoke test imports
         shell: python
+        env:
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           from registry import TOOLS, load_tool_class
           import PySide6, cv2, numpy, yaml
