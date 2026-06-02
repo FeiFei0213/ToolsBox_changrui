@@ -335,6 +335,7 @@ class AnnotationViewer(QGraphicsView):
         self.setCursor(Qt.CursorShape.CrossCursor)
         self._panning = False
         self._pan_start: QPointF | None = None
+        self._right_press_pos: QPointF | None = None  # 右键按下位置，用于区分单击/拖动
 
     def set_mode(self, add_mode: bool):
         ann_scene: AnnotationScene = self.scene()
@@ -350,17 +351,49 @@ class AnnotationViewer(QGraphicsView):
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self.scale(factor, factor)
 
+    def _start_pan(self, pos: QPointF):
+        self._panning = True
+        self._pan_start = pos
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def _end_pan(self):
+        self._panning = False
+        ann_scene: AnnotationScene = self.scene()
+        self.setCursor(
+            Qt.CursorShape.CrossCursor if ann_scene._add_mode
+            else Qt.CursorShape.ArrowCursor
+        )
+
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.MiddleButton:
-            self._panning = True
-            self._pan_start = event.position()
-            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            self._start_pan(event.position())
+            event.accept()
+            return
+        if event.button() == Qt.MouseButton.RightButton:
+            # 先记录右键按下位置，等松开再判断是单击还是拖动
+            self._right_press_pos = event.position()
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
-        if self._panning and self._pan_start is not None:
+        # 中键拖动 或 右键拖动（移动超过 5px 才激活平移）
+        if event.buttons() & Qt.MouseButton.RightButton:
+            if self._right_press_pos is not None:
+                delta = event.position() - self._right_press_pos
+                if not self._panning and (delta.x() ** 2 + delta.y() ** 2) > 25:
+                    self._start_pan(event.position())
+                    self._right_press_pos = None
+            if self._panning and self._pan_start is not None:
+                delta = event.position() - self._pan_start
+                self._pan_start = event.position()
+                self.horizontalScrollBar().setValue(
+                    int(self.horizontalScrollBar().value() - delta.x()))
+                self.verticalScrollBar().setValue(
+                    int(self.verticalScrollBar().value() - delta.y()))
+                event.accept()
+                return
+        elif self._panning and self._pan_start is not None:
             delta = event.position() - self._pan_start
             self._pan_start = event.position()
             self.horizontalScrollBar().setValue(
@@ -369,20 +402,25 @@ class AnnotationViewer(QGraphicsView):
                 int(self.verticalScrollBar().value() - delta.y()))
             event.accept()
             return
-        # 发出鼠标场景坐标
         sp = self.mapToScene(event.position().toPoint())
         self.mouse_moved.emit(sp.x(), sp.y())
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.MiddleButton:
-            self._panning = False
-            ann_scene: AnnotationScene = self.scene()
-            self.setCursor(
-                Qt.CursorShape.CrossCursor if ann_scene._add_mode
-                else Qt.CursorShape.ArrowCursor
-            )
+            self._end_pan()
             event.accept()
+            return
+        if event.button() == Qt.MouseButton.RightButton:
+            was_panning = self._panning
+            if self._panning:
+                self._end_pan()
+            self._right_press_pos = None
+            if not was_panning:
+                # 没有拖动 → 当普通右键，交给 scene 弹上下文菜单
+                super().mouseReleaseEvent(event)
+            else:
+                event.accept()
             return
         super().mouseReleaseEvent(event)
 
