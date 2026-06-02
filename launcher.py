@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QScrollArea, QGridLayout, QMessageBox,
 )
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QAction
 
 from registry import TOOLS, load_tool_class
 
@@ -121,10 +121,11 @@ class ToolCard(QFrame):
 class LauncherWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("VGS 工具箱")
+        self.setWindowTitle("工具箱")
         self.setStyleSheet(WINDOW_STYLE)
         self._open_tools: list[QWidget] = []
         self._build()
+        self._build_menu()
         # 3列卡片(260) + 2间距(18) + 左右边距(30×2) + 滚动条余量
         n_cols = min(CARDS_PER_ROW, len(TOOLS))
         n_rows = (len(TOOLS) + CARDS_PER_ROW - 1) // CARDS_PER_ROW
@@ -142,7 +143,7 @@ class LauncherWindow(QMainWindow):
         root_layout.setContentsMargins(30, 24, 30, 24)
         root_layout.setSpacing(16)
 
-        title = QLabel("VGS 工具箱")
+        title = QLabel("工具箱")
         title_font = QFont()
         title_font.setPointSize(20)
         title_font.setBold(True)
@@ -170,6 +171,49 @@ class LauncherWindow(QMainWindow):
             row, col = divmod(idx, CARDS_PER_ROW)
             card = ToolCard(entry, self)
             grid.addWidget(card, row, col)
+
+    def _build_menu(self):
+        menu = self.menuBar()
+        help_menu = menu.addMenu("帮助")
+        about_act = QAction("关于", self)
+        about_act.triggered.connect(self._show_about)
+        help_menu.addAction(about_act)
+
+    def _show_about(self):
+        try:
+            import main as _main
+            version = getattr(_main, "__version__", "未知")
+        except Exception:
+            version = "未知"
+
+        try:
+            import PySide6
+            pyside6_ver = PySide6.__version__
+        except Exception:
+            pyside6_ver = "未知"
+
+        try:
+            import cv2
+            cv2_ver = cv2.__version__
+        except Exception:
+            cv2_ver = "未知"
+
+        try:
+            import numpy
+            numpy_ver = numpy.__version__
+        except Exception:
+            numpy_ver = "未知"
+
+        QMessageBox.about(
+            self,
+            "关于 工具箱",
+            f"<b>工具箱</b> v{version}<br><br>"
+            f"集中管理常用工具的独立启动器<br><br>"
+            f"<b>运行环境</b><br>"
+            f"PySide6: {pyside6_ver}<br>"
+            f"OpenCV: {cv2_ver}<br>"
+            f"NumPy: {numpy_ver}",
+        )
 
     def _open_tool(self, entry: dict):
         try:

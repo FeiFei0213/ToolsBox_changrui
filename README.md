@@ -182,7 +182,7 @@ contour2:
 
 ### 📋 日志查看器
 
-查看 `D:\project\code\vgs\logs` 下的 VGS 运行日志，解决 UI 关闭后日志消失的问题。
+查看 VGS 运行日志，解决 UI 关闭后日志消失的问题。首次启动时若目录不存在会弹出选择框，也可点击工具栏"切换目录"随时更换。目录选择会保存到 `~/.toolbox/log_viewer_settings.json`。
 
 **功能**
 

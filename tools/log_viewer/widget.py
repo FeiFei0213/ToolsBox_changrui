@@ -8,6 +8,7 @@ widget.py — VGS 日志查看工具
 - Ctrl+E 快速切换"仅看错误"模式
 """
 
+import json
 import os
 import re
 import time
@@ -30,8 +31,33 @@ from tool_base import ToolBase
 
 logger = logging.getLogger(__name__)
 
+_TOOLBOX_DIR       = Path.home() / ".toolbox"
+_LOG_VIEWER_SETTINGS = _TOOLBOX_DIR / "log_viewer_settings.json"
+
+# 默认路径，会在 init_ui 里从设置文件覆盖
 LOG_DIR = Path(r"D:\project\code\vgs\logs")
 VGS_DIR = Path(r"D:\project\code\vgs")
+
+
+def _load_log_dir() -> Path:
+    try:
+        data = json.loads(_LOG_VIEWER_SETTINGS.read_text(encoding="utf-8"))
+        p = Path(data.get("log_dir", ""))
+        if p.exists():
+            return p
+    except Exception:
+        pass
+    return LOG_DIR
+
+
+def _save_log_dir(path: Path) -> None:
+    try:
+        _TOOLBOX_DIR.mkdir(parents=True, exist_ok=True)
+        _LOG_VIEWER_SETTINGS.write_text(
+            json.dumps({"log_dir": str(path)}, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as e:
+        logger.warning(f"save log_viewer settings: {e}")
 
 _RE_WORKDIR = re.compile(r"'workdir':\s*'([^']+)'")
 
@@ -158,6 +184,11 @@ class LogViewerWidget(ToolBase):
         self._last_size: int            = 0
         self._loader: LogLoader | None  = None
         self._error_mode_saved: dict | None = None  # Ctrl+E 保存的级别状态
+
+        # 加载保存的日志目录，不存在则提示用户选择
+        self._log_dir: Path = _load_log_dir()
+        if not self._log_dir.exists():
+            self._log_dir = self._ask_log_dir() or self._log_dir
 
         self._auto_timer = QTimer()
         self._auto_timer.setInterval(3000)
@@ -364,6 +395,13 @@ class LogViewerWidget(ToolBase):
         time_clear_btn.clicked.connect(lambda: (self._time_from.clear(), self._time_to.clear()))
         lay.addWidget(time_clear_btn)
 
+        lay.addWidget(self._vline())
+
+        change_dir_btn = QPushButton("切换目录")
+        change_dir_btn.setToolTip("选择日志目录")
+        change_dir_btn.clicked.connect(self._change_log_dir)
+        lay.addWidget(change_dir_btn)
+
         lay.addStretch()
         return tb
 
@@ -376,13 +414,28 @@ class LogViewerWidget(ToolBase):
 
     # ── 文件列表 ──────────────────────────────────────────────────
 
+    def _ask_log_dir(self) -> Path | None:
+        from PySide6.QtWidgets import QFileDialog
+        chosen = QFileDialog.getExistingDirectory(self, "选择 VGS 日志目录", str(Path.home()))
+        if chosen:
+            p = Path(chosen)
+            _save_log_dir(p)
+            return p
+        return None
+
+    def _change_log_dir(self):
+        p = self._ask_log_dir()
+        if p:
+            self._log_dir = p
+            self._populate_file_list()
+
     def _populate_file_list(self):
         self._file_list.clear()
-        if not LOG_DIR.exists():
-            self._statusbar.showMessage(f"日志目录不存在: {LOG_DIR}")
+        if not self._log_dir.exists():
+            self._statusbar.showMessage(f"日志目录不存在: {self._log_dir}，请点击 [切换目录]")
             return
         files = sorted(
-            LOG_DIR.glob("vgs.log*"),
+            self._log_dir.glob("vgs.log*"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )

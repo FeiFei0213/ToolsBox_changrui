@@ -45,8 +45,9 @@ from tool_base import ToolBase
 # Settings helpers
 # ─────────────────────────────────────────────────────────────────
 
-_SETTINGS_FILE = Path(__file__).parent / "settings.json"
-_LOG_FILE       = Path(__file__).parent / "replacement_log.json"
+_TOOLBOX_DIR    = Path.home() / ".toolbox"
+_SETTINGS_FILE  = _TOOLBOX_DIR / "txt_yaml_settings.json"
+_LOG_FILE       = _TOOLBOX_DIR / "txt_yaml_replacement_log.json"
 
 # 自动扫描时在各盘符下尝试的相对路径（从最可能到最不可能）
 _SCAN_SUBPATHS = [
@@ -82,6 +83,7 @@ def _load_settings() -> dict:
 
 def _save_settings(data: dict) -> None:
     try:
+        _TOOLBOX_DIR.mkdir(parents=True, exist_ok=True)
         _SETTINGS_FILE.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )

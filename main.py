@@ -9,6 +9,8 @@ import sys
 import logging
 from pathlib import Path
 
+__version__ = "1.1.0"
+
 # 确保项目根目录在 sys.path 中，以便各 tool 模块可以 import tool_base
 sys.path.insert(0, str(Path(__file__).parent))
 
