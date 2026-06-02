@@ -40,55 +40,14 @@ from PySide6.QtWidgets import (
 )
 
 from tool_base import ToolBase
+from tools.vgs_context import auto_detect_vgs_root, get_vgs_root, set_vgs_root
 
 # ─────────────────────────────────────────────────────────────────
 # Settings helpers
 # ─────────────────────────────────────────────────────────────────
 
 _TOOLBOX_DIR    = Path.home() / ".toolbox"
-_SETTINGS_FILE  = _TOOLBOX_DIR / "txt_yaml_settings.json"
 _LOG_FILE       = _TOOLBOX_DIR / "txt_yaml_replacement_log.json"
-
-# 自动扫描时在各盘符下尝试的相对路径（从最可能到最不可能）
-_SCAN_SUBPATHS = [
-    "project/code/vgs",
-    "projects/code/vgs",
-    "code/vgs",
-    "dev/vgs",
-    "vgs",
-    "work/vgs",
-    "workspace/vgs",
-]
-
-
-def _auto_detect_vgs_root() -> str | None:
-    """扫描各盘符的常见路径，找到含 config/device 目录的 VGS 根目录。"""
-    import string
-    drives = [f"{d}:" for d in string.ascii_uppercase
-              if Path(f"{d}:\\").exists()]
-    for drive in drives:
-        for sub in _SCAN_SUBPATHS:
-            candidate = Path(drive) / sub
-            if (candidate / "config" / "device").is_dir():
-                return str(candidate)
-    return None
-
-
-def _load_settings() -> dict:
-    try:
-        return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _save_settings(data: dict) -> None:
-    try:
-        _TOOLBOX_DIR.mkdir(parents=True, exist_ok=True)
-        _SETTINGS_FILE.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-    except Exception as e:
-        logger.warning(f"save settings: {e}")
 
 
 def _append_replacement_log(record: dict) -> None:
@@ -344,19 +303,8 @@ class CollisionDeployPanel(QWidget):
     # ── 扫描 / 初始化 ─────────────────────────────────────────────
 
     def _load_and_scan(self):
-        settings = _load_settings()
-        vgs_root = settings.get("vgs_root", "")
-
-        # 已保存的路径不再存在时清空，重新自动检测
-        if vgs_root and not Path(vgs_root).is_dir():
-            vgs_root = ""
-
-        if not vgs_root:
-            detected = _auto_detect_vgs_root()
-            if detected:
-                vgs_root = detected
-                settings["vgs_root"] = vgs_root
-                _save_settings(settings)
+        root = get_vgs_root(auto_detect=True)
+        vgs_root = str(root) if root else ""
 
         self._path_edit.setText(vgs_root)
 
@@ -396,20 +344,16 @@ class CollisionDeployPanel(QWidget):
         if not path:
             return
         self._path_edit.setText(path)
-        settings = _load_settings()
-        settings["vgs_root"] = path
-        _save_settings(settings)
+        set_vgs_root(path)
         self._load_and_scan()
 
     def _auto_find(self):
         self._status_label.setText("正在扫描，请稍候…")
         self.repaint()
-        found = _auto_detect_vgs_root()
+        found = auto_detect_vgs_root()
         if found:
-            self._path_edit.setText(found)
-            settings = _load_settings()
-            settings["vgs_root"] = found
-            _save_settings(settings)
+            self._path_edit.setText(str(found))
+            set_vgs_root(found)
             self._load_and_scan()
         else:
             self._status_label.setText("未自动找到 VGS 目录，请点击浏览手动选择")
@@ -452,7 +396,11 @@ class CollisionDeployPanel(QWidget):
             mold_type = self._mold_type_combo.currentData()
             mold_name = self._mold_name_combo.currentData()
             if device and mold_type and mold_name:
-                vgs_root = self._path_edit.text().strip() or _DEFAULT_VGS_ROOT
+                vgs_root = self._path_edit.text().strip()
+                if not vgs_root:
+                    self._target_label.setText("—")
+                    self.refresh_buttons()
+                    return
                 suggested = (
                     Path(vgs_root) / "config" / "device" / device
                     / "mold" / mold_type / mold_name
@@ -486,7 +434,9 @@ class CollisionDeployPanel(QWidget):
         mold_name = self._mold_name_combo.currentData()
         if not (device and mold_type and mold_name):
             return None
-        vgs_root = self._path_edit.text().strip() or _DEFAULT_VGS_ROOT
+        vgs_root = self._path_edit.text().strip()
+        if not vgs_root:
+            return None
         return (
             Path(vgs_root) / "config" / "device"
             / device / "mold" / mold_type / mold_name

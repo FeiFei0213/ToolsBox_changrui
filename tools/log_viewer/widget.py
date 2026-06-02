@@ -28,18 +28,19 @@ from PySide6.QtWidgets import (
 )
 
 from tool_base import ToolBase
+from tools.vgs_context import get_vgs_logs_dir, resolve_vgs_relative_path, set_vgs_logs_dir
 
 logger = logging.getLogger(__name__)
 
 _TOOLBOX_DIR       = Path.home() / ".toolbox"
 _LOG_VIEWER_SETTINGS = _TOOLBOX_DIR / "log_viewer_settings.json"
 
-# 默认路径，会在 init_ui 里从设置文件覆盖
-LOG_DIR = Path(r"D:\project\code\vgs\logs")
-VGS_DIR = Path(r"D:\project\code\vgs")
-
 
 def _load_log_dir() -> Path:
+    detected = get_vgs_logs_dir(auto_detect=True)
+    if detected:
+        return detected
+
     try:
         data = json.loads(_LOG_VIEWER_SETTINGS.read_text(encoding="utf-8"))
         p = Path(data.get("log_dir", ""))
@@ -47,10 +48,11 @@ def _load_log_dir() -> Path:
             return p
     except Exception:
         pass
-    return LOG_DIR
+    return Path.home()
 
 
 def _save_log_dir(path: Path) -> None:
+    set_vgs_logs_dir(path)
     try:
         _TOOLBOX_DIR.mkdir(parents=True, exist_ok=True)
         _LOG_VIEWER_SETTINGS.write_text(
@@ -416,7 +418,8 @@ class LogViewerWidget(ToolBase):
 
     def _ask_log_dir(self) -> Path | None:
         from PySide6.QtWidgets import QFileDialog
-        chosen = QFileDialog.getExistingDirectory(self, "选择 VGS 日志目录", str(Path.home()))
+        start = str(self._log_dir) if self._log_dir.exists() else str(Path.home())
+        chosen = QFileDialog.getExistingDirectory(self, "选择 VGS 日志目录", start)
         if chosen:
             p = Path(chosen)
             _save_log_dir(p)
@@ -666,7 +669,13 @@ class LogViewerWidget(ToolBase):
         path_str = workdir_raw.replace('\\\\', '\\').replace('/', '\\')
         if path_str.startswith('.\\'):
             path_str = path_str[2:]
-        full_path = VGS_DIR / path_str
+        full_path = resolve_vgs_relative_path(path_str)
+        if full_path is None:
+            QMessageBox.warning(
+                self, "未设置 VGS 路径",
+                "无法定位 VGS 根目录，请先选择 VGS 日志目录。"
+            )
+            return
         if not full_path.exists():
             QMessageBox.warning(self, "文件夹不存在", f"路径不存在:\n{full_path}")
             return

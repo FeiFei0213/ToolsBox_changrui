@@ -12,11 +12,13 @@ import re
 import json
 import os
 import tempfile
+from pathlib import Path
 import numpy as np
 import yaml
 
 from tools.plt_viewer.inverse_transform import apply_inverse_transform
 from tools.common_ui import VerticalTextButton, CollapsibleDockTitleBar
+from tools.vgs_context import get_vgs_root, packaged_resource_path
 
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QTimer
 from PySide6.QtGui import QPen, QBrush, QAction, QImageReader, QColor, QIcon, QPixmap
@@ -485,18 +487,26 @@ class PltViewerWindow(QMainWindow):
             return os.path.basename(filepath)
 
     def _load_default_params(self):
-        default_path = "config/device/M7/0/fit_params.json"
-        for path in [os.path.join(os.getcwd(), default_path), default_path]:
-            if os.path.exists(path):
-                self._load_params_file(path, silent=True)
+        for path in self._default_config_candidates("M7", "0", "fit_params.json"):
+            if path.exists():
+                self._load_params_file(str(path), silent=True)
                 break
 
     def _load_default_poly(self):
-        default_path = "config/device/M7/0/polynomials_fit.json"
-        for path in [os.path.join(os.getcwd(), default_path), default_path]:
-            if os.path.exists(path):
-                self._load_poly_file(path, silent=True)
+        for path in self._default_config_candidates("M7", "0", "polynomials_fit.json"):
+            if path.exists():
+                self._load_poly_file(str(path), silent=True)
                 break
+
+    def _default_config_candidates(self, device: str, camera: str, filename: str) -> list:
+        rel = Path("config") / "device" / device / camera / filename
+        candidates = []
+        vgs_root = get_vgs_root(auto_detect=True)
+        if vgs_root:
+            candidates.append(vgs_root / rel)
+        candidates.append(packaged_resource_path("tools", "pixel_starfire", rel))
+        candidates.append(Path.cwd() / rel)
+        return candidates
 
     def _load_params_file(self, filepath, silent=False):
         try:
