@@ -1,31 +1,65 @@
 # toolbox.spec
-from PyInstaller.utils.hooks import collect_submodules, collect_all
+from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
-# registry.py 用 importlib 动态加载，必须手动声明所有工具子模块
-tool_hidden = collect_submodules('tools')
+# registry.py loads tool modules dynamically through importlib.
+tool_hidden = collect_submodules("tools")
 
-# cv2 / numpy / PySide6 有编译扩展和平台插件，collect_all 确保全部打入
-cv2_datas,     cv2_bins,     cv2_hidden     = collect_all('cv2')
-numpy_datas,   numpy_bins,   numpy_hidden   = collect_all('numpy')
-pyside6_datas, pyside6_bins, pyside6_hidden = collect_all('PySide6')
-
-hidden_imports = tool_hidden + cv2_hidden + numpy_hidden + pyside6_hidden
+hidden_imports = tool_hidden + [
+    "PySide6.QtCore",
+    "PySide6.QtGui",
+    "PySide6.QtWidgets",
+]
 
 a = Analysis(
-    ['main.py'],
-    pathex=['.'],
-    binaries=cv2_bins + numpy_bins + pyside6_bins,
+    ["main.py"],
+    pathex=["."],
+    binaries=[],
     datas=[
-        ('tools/pixel_starfire/config', 'tools/pixel_starfire/config'),
-        ('icon', 'icon'),
-    ] + cv2_datas + numpy_datas + pyside6_datas,
+        ("tools/pixel_starfire/config", "tools/pixel_starfire/config"),
+        ("icon", "icon"),
+    ],
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        "PySide6.Qt3DAnimation",
+        "PySide6.Qt3DCore",
+        "PySide6.Qt3DExtras",
+        "PySide6.Qt3DInput",
+        "PySide6.Qt3DRender",
+        "PySide6.QtBluetooth",
+        "PySide6.QtCharts",
+        "PySide6.QtDataVisualization",
+        "PySide6.QtDesigner",
+        "PySide6.QtHelp",
+        "PySide6.QtHttpServer",
+        "PySide6.QtLocation",
+        "PySide6.QtMultimedia",
+        "PySide6.QtNfc",
+        "PySide6.QtOpenGL",
+        "PySide6.QtPdf",
+        "PySide6.QtPositioning",
+        "PySide6.QtQml",
+        "PySide6.QtQuick",
+        "PySide6.QtRemoteObjects",
+        "PySide6.QtScxml",
+        "PySide6.QtSensors",
+        "PySide6.QtSerialBus",
+        "PySide6.QtWebChannel",
+        "PySide6.QtWebEngineCore",
+        "PySide6.QtWebEngineQuick",
+        "PySide6.QtWebEngineWidgets",
+        "PySide6.QtWebSockets",
+        "PySide6.QtWebView",
+        "numpy.tests",
+        "numpy.typing.tests",
+        "cv2.tests",
+        "pytest",
+        "hypothesis",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -41,7 +75,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ToolsBox',
+    name="ToolsBox",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -54,5 +88,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon/icon.ico',
+    icon="icon/icon.ico",
 )
