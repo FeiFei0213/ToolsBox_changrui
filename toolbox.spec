@@ -6,20 +6,21 @@ block_cipher = None
 # registry.py 用 importlib 动态加载，必须手动声明所有工具子模块
 tool_hidden = collect_submodules('tools')
 
-# cv2 / numpy 有编译扩展，collect_all 确保 DLL 全部打入
-cv2_datas,   cv2_bins,   cv2_hidden   = collect_all('cv2')
-numpy_datas, numpy_bins, numpy_hidden = collect_all('numpy')
+# cv2 / numpy / PySide6 有编译扩展和平台插件，collect_all 确保全部打入
+cv2_datas,     cv2_bins,     cv2_hidden     = collect_all('cv2')
+numpy_datas,   numpy_bins,   numpy_hidden   = collect_all('numpy')
+pyside6_datas, pyside6_bins, pyside6_hidden = collect_all('PySide6')
 
-hidden_imports = tool_hidden + cv2_hidden + numpy_hidden
+hidden_imports = tool_hidden + cv2_hidden + numpy_hidden + pyside6_hidden
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=cv2_bins + numpy_bins,
+    binaries=cv2_bins + numpy_bins + pyside6_bins,
     datas=[
         ('tools/pixel_starfire/config', 'tools/pixel_starfire/config'),
         ('icon', 'icon'),
-    ] + cv2_datas + numpy_datas,
+    ] + cv2_datas + numpy_datas + pyside6_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
