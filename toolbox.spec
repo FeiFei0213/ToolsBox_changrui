@@ -1,20 +1,25 @@
 # toolbox.spec
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules, collect_all
 
 block_cipher = None
 
-# registry.py 用 importlib 动态加载，PyInstaller 静态分析看不到
-# 必须手动声明所有工具子模块
-hidden_imports = collect_submodules('tools')
+# registry.py 用 importlib 动态加载，必须手动声明所有工具子模块
+tool_hidden = collect_submodules('tools')
+
+# cv2 / numpy 有编译扩展，collect_all 确保 DLL 全部打入
+cv2_datas,   cv2_bins,   cv2_hidden   = collect_all('cv2')
+numpy_datas, numpy_bins, numpy_hidden = collect_all('numpy')
+
+hidden_imports = tool_hidden + cv2_hidden + numpy_hidden
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=cv2_bins + numpy_bins,
     datas=[
         ('tools/pixel_starfire/config', 'tools/pixel_starfire/config'),
         ('icon', 'icon'),
-    ],
+    ] + cv2_datas + numpy_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},

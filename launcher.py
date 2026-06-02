@@ -5,6 +5,7 @@ launcher.py — 主启动器窗口。
 点击卡片上的"打开"按钮，懒加载对应 widget 类并弹出独立窗口。
 """
 import logging
+import traceback
 logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import Qt
@@ -181,5 +182,6 @@ class LauncherWindow(QMainWindow):
             widget.show()
             widget.raise_()
         except Exception as exc:
+            tb = traceback.format_exc()
             logger.exception("打开工具失败")
-            QMessageBox.critical(self, "打开失败", f"无法加载工具:\n{exc}")
+            QMessageBox.critical(self, "打开失败", f"无法加载工具:\n\n{tb}")
