@@ -280,7 +280,32 @@ class MyToolWidget(ToolBase):
 
 ## 打包发布 EXE
 
-推送 Git tag 即可触发 GitHub Actions 自动打包，无需本地操作。
+GitHub Actions 会在干净的 Windows 云端环境中安装依赖、编译源码、打包 EXE，
+并实际启动打包后的程序执行自检。下载者不需要安装 Python 或项目依赖。
+
+支持 Windows 10/11 x64。
+
+当前发布包未做商业代码签名，Windows SmartScreen 首次运行时可能显示安全提示；
+如需消除此提示，需要配置受信任的代码签名证书。
+
+### 普通推送
+
+推送到 `master` 或 `main` 后，会自动生成可下载的 Actions Artifact：
+
+1. 打开仓库的 **Actions**
+2. 进入最新一次 `Build Windows EXE`
+3. 在页面底部下载 `ToolsBox-Windows-x64-*`
+
+Artifact 内包含：
+
+- `ToolsBox.exe`：独立可执行文件
+- `SHA256SUMS.txt`：文件完整性校验值
+
+也可以在 Actions 页面手动运行该工作流。
+
+### 正式发布
+
+推送 Git tag 会在完成相同构建和自检后，自动创建 GitHub Release。
 
 ### 触发方式
 

@@ -181,10 +181,12 @@ class LauncherWindow(QMainWindow):
 
     def _show_about(self):
         try:
-            import main as _main
-            version = getattr(_main, "__version__", "未知")
+            from build_info import __commit__, __version__
+            version = __version__
+            commit = __commit__
         except Exception:
             version = "未知"
+            commit = "未知"
 
         try:
             import PySide6
@@ -208,6 +210,7 @@ class LauncherWindow(QMainWindow):
             self,
             "关于 工具箱",
             f"<b>工具箱</b> v{version}<br><br>"
+            f"构建: {commit}<br><br>"
             f"集中管理常用工具的独立启动器<br><br>"
             f"<b>运行环境</b><br>"
             f"PySide6: {pyside6_ver}<br>"
