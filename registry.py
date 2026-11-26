@@ -22,6 +22,9 @@ def tool_entry(
 
 
 TOOLS = [
+    tool_entry("tools.image_viewer.widget", "ImageViewerWidget",
+               "Ziv 看图", "打开或拖入图片，缩放、连续翻图、显示准星和两点测距",
+               "图像处理", "🖼️", "图片查看器 坐标 像素 image viewer"),
     tool_entry("tools.image_transform.widget", "ImageTransformWidget",
                "图片变换", "上下和左右镜像、90° 快捷旋转与任意角度旋转",
                "图像处理", "🔄", "图像 旋转 翻转 flip rotate 镜像"),

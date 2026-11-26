@@ -7,6 +7,32 @@ from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
 
+def array_to_pixmap(image: np.ndarray) -> QPixmap:
+    """将 OpenCV 的灰度/BGR/BGRA 图像转换成独立的显示像素。"""
+    if (
+        not image.size
+        or image.dtype not in (np.uint8, np.uint16)
+        or not (image.ndim == 2 or (image.ndim == 3 and image.shape[2] in (3, 4)))
+    ):
+        raise ValueError("仅支持 8 位或 16 位的灰度、彩色和透明图片。")
+    if image.dtype == np.uint16:
+        image = cv2.convertScaleAbs(image, alpha=1 / 257)
+    image = np.ascontiguousarray(image)
+    if image.ndim == 2:
+        pixel_format = QImage.Format.Format_Grayscale8
+    elif image.shape[2] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
+        pixel_format = QImage.Format.Format_RGBA8888
+    else:
+        pixel_format = QImage.Format.Format_BGR888
+    height, width = image.shape[:2]
+    qimage = QImage(image.data, width, height, image.strides[0], pixel_format)
+    pixmap = QPixmap.fromImage(qimage.copy())
+    if pixmap.isNull():
+        raise ValueError("图片尺寸超出预览限制。")
+    return pixmap
+
+
 class PreviewLabel(QLabel):
     def __init__(self, placeholder: str):
         super().__init__(placeholder)
@@ -25,20 +51,7 @@ class PreviewLabel(QLabel):
             self.setText(placeholder)
             return
 
-        # 仅转换显示用像素，导出仍使用变换后的原始位深。
-        if image.dtype == np.uint16:
-            image = np.rint(image / 257.0).astype(np.uint8)
-        image = np.ascontiguousarray(image)
-        if image.ndim == 2:
-            pixel_format = QImage.Format.Format_Grayscale8
-        elif image.shape[2] == 4:
-            image = cv2.cvtColor(image, cv2.COLOR_BGRA2RGBA)
-            pixel_format = QImage.Format.Format_RGBA8888
-        else:
-            pixel_format = QImage.Format.Format_BGR888
-        height, width = image.shape[:2]
-        qimage = QImage(image.data, width, height, image.strides[0], pixel_format)
-        self._pixmap = QPixmap.fromImage(qimage.copy())
+        self._pixmap = array_to_pixmap(image)
         self._refresh()
 
     def resizeEvent(self, event):
