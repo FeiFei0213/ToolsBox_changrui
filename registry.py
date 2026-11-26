@@ -4,7 +4,9 @@
 """
 
 TOOLS = [
+    {"module": "tools.color_space_viewer.widget",             "class": "ColorSpaceViewerWidget"},
     {"module": "tools.mask_dilate.widget",                   "class": "MaskDilateWidget"},
+    {"module": "tools.mask_painter.widget",                  "class": "MaskPainterWidget"},
     {"module": "tools.txt_yaml.widget",                      "class": "TxtYamlWidget"},
     {"module": "tools.pixel_starfire.widget",                "class": "PixelStarfireWidget"},
     {"module": "tools.extra_json.widget",                    "class": "ExtraJsonWidget"},
