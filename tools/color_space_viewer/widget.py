@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -15,12 +15,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSplitter,
     QVBoxLayout,
 )
 
 from tool_base import ToolBase
+from tools.image_preview import PreviewLabel
 from tools.color_space_viewer.core import (
     COLOR_SPACES,
     available_views,
@@ -33,63 +33,6 @@ from tools.color_space_viewer.core import (
 
 IMAGE_FILTER = "图片文件 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp)"
 SUPPORTED_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
-
-
-class PreviewLabel(QLabel):
-    """保持宽高比显示 ndarray 的预览标签。"""
-
-    def __init__(self, placeholder: str):
-        super().__init__(placeholder)
-        self._image: np.ndarray | None = None
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setMinimumSize(320, 260)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet(
-            "background-color:#202124; color:#9aa0a6; border:1px solid #3c4043; "
-            "border-radius:6px;"
-        )
-
-    def set_array(self, image: np.ndarray | None, placeholder: str = "等待加载图片") -> None:
-        self._image = image
-        if image is None:
-            self.clear()
-            self.setText(placeholder)
-            return
-        self._refresh_pixmap()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        if self._image is not None:
-            self._refresh_pixmap()
-
-    def _refresh_pixmap(self) -> None:
-        image = np.ascontiguousarray(self._image)
-        if image.ndim == 2:
-            height, width = image.shape
-            qimage = QImage(
-                image.data,
-                width,
-                height,
-                image.strides[0],
-                QImage.Format.Format_Grayscale8,
-            )
-        else:
-            height, width, _ = image.shape
-            qimage = QImage(
-                image.data,
-                width,
-                height,
-                image.strides[0],
-                QImage.Format.Format_BGR888,
-            )
-        pixmap = QPixmap.fromImage(qimage.copy())
-        self.setPixmap(
-            pixmap.scaled(
-                self.size(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-        )
 
 
 class ColorSpaceViewerWidget(ToolBase):

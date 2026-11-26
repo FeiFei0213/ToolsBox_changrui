@@ -1,6 +1,6 @@
 # 工具箱
 
-集中管理常用小工具的独立启动器，基于 PySide6，点击卡片即可打开对应工具窗口。
+基于 PySide6 的生产工具箱，集中管理图像处理、标定与坐标、生产配置和日志工具。
 
 ---
 
@@ -29,9 +29,29 @@ cd D:\project\code\toolbox
 python main.py
 ```
 
+左侧选择分类，或按 `Ctrl+F` 搜索工具名称、说明和关键词。只有一条匹配结果时，按 `Enter` 打开。工具各自在独立窗口运行。
+
 ---
 
 ## 当前工具
+
+### 🔄 图片变换
+
+打开或拖入 PNG、JPG、BMP、TIFF 或 WebP 图片，左右对照原图和当前结果。镜像和旋转可以连续应用，例如按两次 `Alt+→` 得到 180° 旋转。
+
+| 快捷键 | 操作 |
+|--------|------|
+| Ctrl+O / Ctrl+S | 打开图片 / 另存结果 |
+| Alt+← / Alt+→ | 逆时针 / 顺时针旋转 90° |
+| Alt+H / Alt+V | 左右 / 上下镜像 |
+| Ctrl+Z / Ctrl+Y | 撤销 / 重做 |
+| Ctrl+R | 恢复原图，也可撤销此操作 |
+
+也可输入自定义角度，正值表示顺时针。任意角度旋转会自动扩展画布。另存为 PNG、TIFF 或 WebP 可保留透明区域，另存为 JPG 或 BMP 会以黑色填充。需要保留 16 位数据时，请选 PNG 或 TIFF。
+
+任意角度旋转的输入与输出边长均需小于 32,767 像素，输出最多为 4,000 万像素。较长的线扫图仍可使用镜像和 90° 旋转。
+
+---
 
 ### 🌈 图像色彩空间查看器
 
@@ -250,7 +270,7 @@ contour2:
 ```
 toolbox/
 ├── main.py                      # 入口
-├── launcher.py                  # 卡片网格启动器
+├── launcher.py                  # 工具分类与搜索主页
 ├── tool_base.py                 # ToolBase 抽象基类
 ├── registry.py                  # 工具注册表 ← 添加新工具改这里
 ├── requirements.txt
@@ -258,6 +278,11 @@ toolbox/
 │   └── icon.png                 # 应用图标（打包时使用）
 └── tools/
     ├── common_ui.py             # 共享 UI 组件（可折叠 Dock 标题栏等）
+    ├── image_io.py              # 支持中文路径的图像读写
+    ├── image_preview.py         # 保持宽高比的图像预览
+    ├── image_transform/
+    │   ├── core.py              # 镜像、旋转、导出和操作历史
+    │   └── widget.py            # 图片变换窗口
     ├── yaml_formatter.py        # YAML 格式化工具
     ├── color_space_viewer/
     │   ├── core.py              # 色彩空间转换、格式归一化与图片读写
@@ -314,13 +339,14 @@ class MyToolWidget(ToolBase):
 
 > 若工具需要 `QMainWindow`（带 Dock / Toolbar），直接继承 `QMainWindow` 并声明三个类属性即可，无需继承 `ToolBase`。
 
-**第二步**：在 `registry.py` 追加一行：
+**第二步**：在 `registry.py` 的 `TOOLS` 中添加模块路径、类名与主页元数据：
 
 ```python
-{"module": "tools.my_tool.widget", "class": "MyToolWidget"},
+tool_entry("tools.my_tool.widget", "MyToolWidget",
+           "我的新工具", "一句话说明功能", "图像处理", "🛠", "搜索关键词"),
 ```
 
-重启程序，卡片自动出现。
+重启程序后，就可以在对应分类中找到它。
 
 ---
 
@@ -381,6 +407,6 @@ tag 格式须以 `v` 开头（如 `v1.0.0`、`v1.2.3`）。
 
 ## 注意事项
 
-- **懒加载**：工具模块在点击卡片时才 import，缺少依赖只影响该工具，不影响主界面启动。
+- **懒加载**：主页从注册表读取分类、名称和描述。打开工具窗口时才导入对应模块。
 - **图标**：打包时使用 `icon/icon.png`。
 - **board_calibration**：图片路径须为纯英文，不支持中文路径。

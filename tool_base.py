@@ -2,7 +2,7 @@
 tool_base.py — 所有工具 Widget 的抽象基类。
 
 继承 ToolBase 并实现 init_ui() 即可接入启动器。
-类属性 tool_name / tool_description / tool_icon 由 launcher 读取用于渲染卡片。
+tool_name 用作窗口标题。主页显示内容由 registry.py 提供。
 """
 from abc import abstractmethod
 from PySide6.QtWidgets import QWidget

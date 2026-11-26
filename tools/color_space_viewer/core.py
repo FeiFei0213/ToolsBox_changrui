@@ -1,10 +1,11 @@
 """图像色彩空间查看器的无界面核心逻辑。"""
 
 from dataclasses import dataclass
-from pathlib import Path
 
 import cv2
 import numpy as np
+
+from tools.image_io import read_image, write_image
 
 
 @dataclass(frozen=True)
@@ -32,31 +33,6 @@ COLOR_SPACES: dict[str, ColorSpaceSpec] = {
     "YCrCb": ColorSpaceSpec("YCrCb", ("Y", "Cr", "Cb"), cv2.COLOR_BGR2YCrCb),
     "XYZ": ColorSpaceSpec("XYZ", ("X", "Y", "Z"), cv2.COLOR_BGR2XYZ),
 }
-
-
-def read_image(path: str | Path) -> np.ndarray:
-    """读取图片，支持 Windows 中文路径及 OpenCV 可解码的常见格式。"""
-    try:
-        data = np.fromfile(str(path), dtype=np.uint8)
-    except OSError as exc:
-        raise ValueError(f"无法读取图片: {path}") from exc
-    image = cv2.imdecode(data, cv2.IMREAD_UNCHANGED)
-    if image is None:
-        raise ValueError(f"无法读取图片: {path}")
-    return image
-
-
-def write_image(path: str | Path, image: np.ndarray) -> None:
-    """保存图片，支持 Windows 中文路径。"""
-    path = Path(path)
-    suffix = path.suffix.lower() or ".png"
-    ok, encoded = cv2.imencode(suffix, image)
-    if not ok:
-        raise ValueError(f"不支持的输出格式: {suffix}")
-    try:
-        encoded.tofile(str(path))
-    except OSError as exc:
-        raise ValueError(f"无法保存图片: {path}") from exc
 
 
 def _to_uint8(image: np.ndarray) -> np.ndarray:

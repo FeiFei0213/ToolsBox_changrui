@@ -1,234 +1,251 @@
-"""
-launcher.py — 主启动器窗口。
+"""生产工具箱的分类与搜索主页。"""
 
-从 registry.TOOLS 读取工具列表，渲染卡片网格（每行 3 列）。
-点击卡片上的"打开"按钮，懒加载对应 widget 类并弹出独立窗口。
-"""
 import logging
-import traceback
+
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QButtonGroup, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
+
+from registry import CATEGORIES, TOOLS, load_tool_class
+
 logger = logging.getLogger(__name__)
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QFrame, QScrollArea, QGridLayout, QMessageBox,
-)
-from PySide6.QtGui import QFont, QAction
-
-from registry import TOOLS, load_tool_class
-
-CARDS_PER_ROW = 3
-
-CARD_STYLE = """
-QFrame#ToolCard {
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 10px;
+HOME_STYLE = """
+QWidget#ToolHome { background: #f2f5f9; color: #17263a; }
+QFrame#Navigation, QFrame#ToolCard {
+    background: #ffffff; border: 1px solid #d9e2ed; border-radius: 10px;
 }
-QFrame#ToolCard:hover {
-    border: 1px solid #1976D2;
-    background-color: #f5f9ff;
+QLabel#HomeTitle { font-size: 26px; font-weight: bold; color: #17263a; }
+QLabel#SectionTitle { font-size: 16px; font-weight: bold; color: #17263a; }
+QLabel#ToolName { font-size: 14px; font-weight: bold; color: #17263a; }
+QLabel[muted="true"] { color: #4d6078; }
+QLabel#ToolIcon {
+    background: #edf3fb; color: #17263a; border-radius: 8px; font-size: 20px;
 }
+QLineEdit#ToolSearch {
+    background: white; color: #17263a; border: 1px solid #b9c8db;
+    border-radius: 8px; padding: 8px 12px;
+}
+QLineEdit#ToolSearch:focus { border: 1px solid #2365b2; }
+QPushButton[category="true"] {
+    text-align: left; padding: 9px 10px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent; color: #31465e;
+}
+QPushButton[category="true"]:hover { background: #f1f5fb; }
+QPushButton[category="true"]:checked { background: #e7f0ff; color: #164e93; font-weight: bold; }
+QPushButton[category="true"]:focus { border-color: #2365b2; }
+QPushButton[toolOpen="true"] {
+    background: #eaf2fd; color: #164e93; font-weight: bold;
+    border: 1px solid transparent; border-radius: 6px; padding: 6px 14px;
+}
+QPushButton[toolOpen="true"]:hover { background: #dceaff; }
+QPushButton[toolOpen="true"]:focus { border-color: #2365b2; }
 """
 
-OPEN_BTN_STYLE = """
-QPushButton {
-    background-color: #1976D2;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 18px;
-    font-size: 13px;
-}
-QPushButton:hover {
-    background-color: #1565C0;
-}
-QPushButton:pressed {
-    background-color: #0D47A1;
-}
-"""
 
-WINDOW_STYLE = """
-QMainWindow {
-    background-color: #f5f5f5;
-}
-QWidget#central {
-    background-color: #f5f5f5;
-}
-"""
+def muted_label(text: str = "") -> QLabel:
+    label = QLabel(text)
+    label.setProperty("muted", True)
+    return label
 
 
 class ToolCard(QFrame):
-    def __init__(self, entry: dict, launcher: "LauncherWindow", parent=None):
-        super().__init__(parent)
-        self._entry = entry
-        self._launcher = launcher
+    def __init__(self, entry: dict[str, str], launcher: "LauncherWindow"):
+        super().__init__()
+        self.entry = entry
         self.setObjectName("ToolCard")
-        self.setFixedSize(260, 220)
-        self.setStyleSheet(CARD_STYLE)
-        self._build()
 
-    def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 14)
-        layout.setSpacing(8)
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(12)
 
-        # 先用占位符加载元数据
-        try:
-            cls = load_tool_class(self._entry)
-            icon = getattr(cls, "tool_icon", "🔧")
-            name = getattr(cls, "tool_name", self._entry["class"])
-            desc = getattr(cls, "tool_description", "")
-        except Exception:
-            icon = "🔧"
-            name = self._entry["class"]
-            desc = "（加载失败）"
+        icon = QLabel(entry["icon"])
+        icon.setObjectName("ToolIcon")
+        icon.setFixedSize(38, 38)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon)
 
-        icon_label = QLabel(icon)
-        icon_font = QFont()
-        icon_font.setPointSize(28)
-        icon_label.setFont(icon_font)
-        icon_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(icon_label)
+        copy = QVBoxLayout()
+        copy.setSpacing(2)
+        title = QLabel(entry["name"])
+        title.setObjectName("ToolName")
+        title.setWordWrap(True)
+        description = muted_label(entry["description"])
+        description.setWordWrap(True)
+        copy.addWidget(title)
+        copy.addWidget(description)
+        layout.addLayout(copy, 1)
 
-        name_label = QLabel(name)
-        name_font = QFont()
-        name_font.setBold(True)
-        name_font.setPointSize(11)
-        name_label.setFont(name_font)
-        name_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        name_label.setWordWrap(True)
-        layout.addWidget(name_label)
+        button = QPushButton("打开")
+        button.setProperty("toolOpen", True)
+        button.setAccessibleName(f'打开 {entry["name"]}')
+        button.clicked.connect(lambda: launcher._open_tool(entry))
+        layout.addWidget(button)
 
-        desc_label = QLabel(desc)
-        desc_label.setStyleSheet("color: #777; font-size: 11px;")
-        desc_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label)
-
-        layout.addStretch()
-
-        open_btn = QPushButton("打开")
-        open_btn.setStyleSheet(OPEN_BTN_STYLE)
-        open_btn.clicked.connect(self._open)
-        layout.addWidget(open_btn)
-
-    def _open(self):
-        self._launcher._open_tool(self._entry)
+    def matches(self, category: str, words: list[str]) -> bool:
+        if category != "全部工具" and self.entry["category"] != category:
+            return False
+        searchable = " ".join(self.entry[key] for key in (
+            "name", "description", "category", "keywords",
+        )).casefold()
+        return all(word in searchable for word in words)
 
 
 class LauncherWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("工具箱")
-        self.setStyleSheet(WINDOW_STYLE)
+        self.setWindowTitle("生产工具箱")
+        self.setMinimumSize(620, 390)
+        self.resize(QSize(960, 660).boundedTo(self.screen().availableGeometry().size() - QSize(32, 64)))
         self._open_tools: list[QWidget] = []
+        self._filtered_cards: list[ToolCard] = []
         self._build()
         self._build_menu()
-        # 3列卡片(260) + 2间距(18) + 左右边距(30×2) + 滚动条余量
-        n_cols = min(CARDS_PER_ROW, len(TOOLS))
-        n_rows = (len(TOOLS) + CARDS_PER_ROW - 1) // CARDS_PER_ROW
-        w = n_cols * 260 + (n_cols - 1) * 18 + 60 + 20
-        h = n_rows * 220 + (n_rows - 1) * 18 + 160  # 160 = 标题区 + 边距
-        self.resize(w, h)
-        self.setMinimumSize(w, h)
+        find = QShortcut(QKeySequence.StandardKey.Find, self)
+        find.activated.connect(self._focus_search)
 
     def _build(self):
         central = QWidget()
-        central.setObjectName("central")
+        central.setObjectName("ToolHome")
+        central.setStyleSheet(HOME_STYLE)
         self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(22, 18, 22, 18)
+        root.setSpacing(14)
 
-        root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(30, 24, 30, 24)
-        root_layout.setSpacing(16)
+        heading = QHBoxLayout()
+        title = QLabel("生产工具箱")
+        title.setObjectName("HomeTitle")
+        heading.addWidget(title)
+        heading.addStretch(1)
+        self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("ToolSearch")
+        self.search_edit.setAccessibleName("搜索工具")
+        self.search_edit.setPlaceholderText("搜索工具、功能或关键词")
+        self.search_edit.setToolTip("Ctrl+F 搜索，只有一项结果时按 Enter 打开")
+        self.search_edit.setClearButtonEnabled(True)
+        heading.addWidget(self.search_edit, 2)
+        root.addLayout(heading)
 
-        title = QLabel("工具箱")
-        title_font = QFont()
-        title_font.setPointSize(20)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        root_layout.addWidget(title)
+        body = QHBoxLayout()
+        body.setSpacing(16)
+        root.addLayout(body, 1)
+        nav = QFrame()
+        nav.setObjectName("Navigation")
+        nav.setFixedWidth(138)
+        navigation = QVBoxLayout(nav)
+        navigation.setContentsMargins(8, 10, 8, 10)
+        navigation.setSpacing(3)
+        self._category_group = QButtonGroup(self)
+        self.category_buttons: dict[str, QPushButton] = {}
+        for category in ("全部工具", *CATEGORIES):
+            button = QPushButton(category)
+            button.setProperty("category", True)
+            button.setCheckable(True)
+            self._category_group.addButton(button)
+            self.category_buttons[category] = button
+            navigation.addWidget(button)
+        self.category_buttons["全部工具"].setChecked(True)
+        navigation.addStretch()
+        body.addWidget(nav)
 
-        subtitle = QLabel("选择一个工具开始使用")
-        subtitle.setStyleSheet("color: #888; font-size: 13px;")
-        root_layout.addWidget(subtitle)
+        results = QVBoxLayout()
+        results.setSpacing(8)
+        result_heading = QHBoxLayout()
+        self.section_title = QLabel()
+        self.section_title.setObjectName("SectionTitle")
+        self.result_count = muted_label()
+        result_heading.addWidget(self.section_title)
+        result_heading.addStretch()
+        result_heading.addWidget(self.result_count)
+        results.addLayout(result_heading)
+        body.addLayout(results, 1)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        root_layout.addWidget(scroll)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        container = QWidget()
+        container.setStyleSheet("QWidget#ToolResults { background: #f2f5f9; }")
+        container.setObjectName("ToolResults")
+        self.scroll.setWidget(container)
+        results.addWidget(self.scroll, 1)
 
-        card_container = QWidget()
-        scroll.setWidget(card_container)
+        cards = QVBoxLayout(container)
+        cards.setContentsMargins(0, 0, 3, 0)
+        cards.setSpacing(7)
+        self._cards = [ToolCard(entry, self) for entry in TOOLS]
+        for card in self._cards:
+            cards.addWidget(card)
+        self.empty_label = muted_label("没有匹配的工具，试试其他关键词或分类。")
+        self.empty_label.setWordWrap(True)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setMinimumHeight(76)
+        cards.addWidget(self.empty_label)
+        cards.addStretch()
 
-        grid = QGridLayout(card_container)
-        grid.setSpacing(18)
-        grid.setContentsMargins(0, 8, 0, 8)
-        grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._category_group.buttonClicked.connect(self._apply_filter)
+        self.search_edit.textChanged.connect(self._apply_filter)
+        self.search_edit.returnPressed.connect(self._open_search_result)
+        self._apply_filter()
 
-        for idx, entry in enumerate(TOOLS):
-            row, col = divmod(idx, CARDS_PER_ROW)
-            card = ToolCard(entry, self)
-            grid.addWidget(card, row, col)
+    def _focus_search(self):
+        self.search_edit.setFocus()
+        self.search_edit.selectAll()
+
+    def _apply_filter(self):
+        category = self._category_group.checkedButton().text()
+        words = self.search_edit.text().casefold().split()
+        self._filtered_cards = []
+        for card in self._cards:
+            matches = card.matches(category, words)
+            card.setVisible(matches)
+            if matches:
+                self._filtered_cards.append(card)
+        self.section_title.setText(category)
+        self.result_count.setText(f"{len(self._filtered_cards)} 个工具")
+        self.empty_label.setVisible(not self._filtered_cards)
+        self.scroll.verticalScrollBar().setValue(0)
+
+    def _open_search_result(self):
+        if len(self._filtered_cards) == 1:
+            self._open_tool(self._filtered_cards[0].entry)
 
     def _build_menu(self):
-        menu = self.menuBar()
-        help_menu = menu.addMenu("帮助")
-        about_act = QAction("关于", self)
-        about_act.triggered.connect(self._show_about)
-        help_menu.addAction(about_act)
+        help_menu = self.menuBar().addMenu("帮助")
+        about = QAction("关于", self)
+        about.triggered.connect(self._show_about)
+        help_menu.addAction(about)
 
     def _show_about(self):
-        try:
-            from build_info import __commit__, __version__
-            version = __version__
-            commit = __commit__
-        except Exception:
-            version = "未知"
-            commit = "未知"
+        from build_info import __commit__, __version__
 
-        try:
-            import PySide6
-            pyside6_ver = PySide6.__version__
-        except Exception:
-            pyside6_ver = "未知"
-
-        try:
-            import cv2
-            cv2_ver = cv2.__version__
-        except Exception:
-            cv2_ver = "未知"
-
-        try:
-            import numpy
-            numpy_ver = numpy.__version__
-        except Exception:
-            numpy_ver = "未知"
+        versions = []
+        for name, module in (("PySide6", "PySide6"), ("OpenCV", "cv2"), ("NumPy", "numpy")):
+            try:
+                version = __import__(module).__version__
+            except Exception:
+                version = "未知"
+            versions.append(f"{name}: {version}")
 
         QMessageBox.about(
-            self,
-            "关于 工具箱",
-            f"<b>工具箱</b> v{version}<br><br>"
-            f"构建: {commit}<br><br>"
-            f"集中管理常用工具的独立启动器<br><br>"
-            f"<b>运行环境</b><br>"
-            f"PySide6: {pyside6_ver}<br>"
-            f"OpenCV: {cv2_ver}<br>"
-            f"NumPy: {numpy_ver}",
+            self, "关于生产工具箱",
+            f"<b>生产工具箱</b> v{__version__}<br>构建: {__commit__}<br><br>"
+            + "<br>".join(versions),
         )
 
-    def _open_tool(self, entry: dict):
+    def _open_tool(self, entry: dict[str, str]):
         try:
-            cls = load_tool_class(entry)
-            widget = cls()
+            widget = load_tool_class(entry)()
             widget.setWindowFlag(Qt.WindowType.Window, True)
             widget.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-            widget.destroyed.connect(lambda: self._open_tools.remove(widget) if widget in self._open_tools else None)
+            widget.destroyed.connect(lambda: self._open_tools.remove(widget))
             self._open_tools.append(widget)
             widget.show()
             widget.raise_()
         except Exception as exc:
-            tb = traceback.format_exc()
-            logger.exception("打开工具失败")
-            QMessageBox.critical(self, "打开失败", f"无法加载工具:\n\n{tb}")
+            logger.exception("打开工具失败: %s", entry["name"])
+            QMessageBox.critical(self, "打开失败", f'无法打开 {entry["name"]}。\n\n{exc}')
